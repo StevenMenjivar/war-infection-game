@@ -3,7 +3,6 @@ import { ASSET_PATHS, TILE_ASSET_PATHS } from '../config/AssetManifest';
 
 export class PreloadScene extends Phaser.Scene {
   private progressBar!: Phaser.GameObjects.Rectangle;
-  private progressTrack!: Phaser.GameObjects.Rectangle;
   private statusText!: Phaser.GameObjects.Text;
 
   constructor() { super('PreloadScene'); }
@@ -18,7 +17,7 @@ export class PreloadScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif', fontSize: '12px',
       color: '#8c9b8e', letterSpacing: 3,
     }).setOrigin(0.5);
-    this.progressTrack = this.add.rectangle(640, 390, 360, 8, 0x29342d).setOrigin(0.5);
+    this.add.rectangle(640, 390, 360, 8, 0x29342d).setOrigin(0.5);
     this.progressBar = this.add.rectangle(460, 390, 0, 8, 0x9bc36a).setOrigin(0, 0.5);
     this.statusText = this.add.text(640, 415, 'Cargando...', {
       fontFamily: 'Arial, sans-serif', fontSize: '11px', color: '#9eaa9f',

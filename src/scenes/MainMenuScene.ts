@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-const C = { bg: 0x090e0c, panel: 0x101a16, green: 0xb5d58a, muted: '#91a095', red: 0xb94a42, white: '#e8eee8' };
+const C = { bg: 0x090e0c, panel: 0x101a16, green: 0xb5d58a, muted: '#91a095', red: '#b94a42', white: '#e8eee8' };
 
 export class MainMenuScene extends Phaser.Scene {
   constructor() { super('MainMenuScene'); }

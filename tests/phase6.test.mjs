@@ -11,7 +11,7 @@ test('la colisión de proyectil enemigo identifica al jugador sin asumir el orde
   assert.match(pair, /if \(first === expected\) return second/);
   assert.match(pair, /if \(second === expected\) return first/);
   assert.match(handler, /getOtherCollisionObject\(first, second, this\.player\)/);
-  assert.match(handler, /this\.enemyProjectiles\.contains\(projectileObject\)/);
+  assert.match(handler, /this\.enemyProjectiles\.contains\(projectileObject as Phaser\.GameObjects\.GameObject\)/);
   assert.doesNotMatch(handler, /disableBody\(true, true\)/);
   assert.match(handler, /this\.damagePlayer\(damage\)/);
 });

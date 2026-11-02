@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config/GameConfig';
 import { PLAYER_TIERS, type PlayerTier } from '../config/ProgressionConfig';
+import { requestSceneNavigation } from '../systems/SceneNavigation';
 
 interface CheckpointSceneData {
   tier: PlayerTier;
@@ -13,11 +14,13 @@ interface CheckpointSceneData {
 /** Pantalla de reintento exclusiva de la arena; GameScene permanece pausada debajo. */
 export class CheckpointScene extends Phaser.Scene {
   private dataFromGame!: CheckpointSceneData;
+  private transitioning = false;
 
   constructor() { super('CheckpointScene'); }
 
   init(data: CheckpointSceneData): void {
     this.dataFromGame = data;
+    this.transitioning = false;
   }
 
   create(): void {
@@ -40,14 +43,17 @@ export class CheckpointScene extends Phaser.Scene {
       }).setOrigin(0.5);
 
     this.createButton(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 100, 'REINTENTAR HORDA', () => {
+      if (this.transitioning) return;
+      this.transitioning = true;
       const gameScene = this.scene.get('GameScene');
       gameScene.events.emit('checkpoint-retry');
       this.scene.stop();
       this.scene.resume('GameScene');
     });
     this.createButton(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 166, 'REGRESAR AL MENÚ', () => {
-      this.scene.stop('GameScene');
-      this.scene.start('MainMenuScene');
+      if (this.transitioning) return;
+      this.transitioning = true;
+      requestSceneNavigation(this, 'MainMenuScene');
     });
   }
 

@@ -27,6 +27,8 @@ export const PLAYER_TIERS: Record<PlayerTier, PlayerTierConfig> = {
   },
 };
 
+export const PHASE13_EARLY_PURSUIT_MULTIPLIER = 1.25;
+
 export const MEDKIT_CONFIG = {
   healFractionOfMaxHealth: 0.35,
   initialCount: 5,
@@ -99,7 +101,12 @@ export function getEnemyDifficultyForRoom(roomIndex: number): EnemyDifficultyPro
       aimSpreadRadians: 0.035,
     },
   ];
-  return applyPhase9EnemyPressure(profiles[band]!);
+  const selected = profiles[band]!;
+  // Acelera solo la persecución (no patrullaje ni cadencia) en las dos primeras bandas.
+  const pursuitAdjusted = band <= 1
+    ? { ...selected, moveSpeed: selected.moveSpeed * PHASE13_EARLY_PURSUIT_MULTIPLIER }
+    : selected;
+  return applyPhase9EnemyPressure(pursuitAdjusted);
 }
 
 /** Perfil de horda: resistencia, detección y presión crecen en cada oleada. */
