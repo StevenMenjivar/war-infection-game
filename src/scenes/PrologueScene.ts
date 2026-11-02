@@ -12,10 +12,19 @@ export class PrologueScene extends Phaser.Scene {
   private hintText!: Phaser.GameObjects.Text;
   private typingTimer?: Phaser.Time.TimerEvent;
   private finished = false;
+  private transitionPending = false;
 
   constructor() { super('PrologueScene'); }
 
   create(): void {
+    // Phaser reutiliza la instancia al volver desde una victoria y comenzar otra campaña.
+    this.lineIndex = 0;
+    this.visibleWords = 0;
+    this.words = [];
+    this.finished = false;
+    this.transitionPending = false;
+    this.typingTimer?.remove(false);
+    this.typingTimer = undefined;
     const name = String(this.registry.get('playerName') ?? 'Soldado');
     this.lines = [
       { speaker: 'CAPITÁN MILLER', text: `Soldado ${name} cuál es la situación del pelotón?.` },
@@ -54,12 +63,24 @@ export class PrologueScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '10px', color: '#607165', letterSpacing: 1,
     });
 
-    this.input.keyboard?.on('keydown-ENTER', this.advance, this);
+    const keyboard = this.input.keyboard;
+    keyboard?.off('keydown-ENTER', this.advance, this);
+    keyboard?.off('keydown-ENTER', this.startGame, this);
+    keyboard?.on('keydown-ENTER', this.advance, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.input.keyboard?.off('keydown-ENTER', this.advance, this);
-      this.typingTimer?.remove();
+      keyboard?.off('keydown-ENTER', this.advance, this);
+      keyboard?.off('keydown-ENTER', this.startGame, this);
+      this.typingTimer?.remove(false);
+      this.typingTimer = undefined;
     });
     this.showLine();
+  }
+
+  private startGame(): void {
+    if (this.transitionPending) return;
+    this.transitionPending = true;
+    this.input.keyboard?.off('keydown-ENTER', this.startGame, this);
+    this.scene.start('GameScene');
   }
 
   private showLine(): void {
@@ -96,7 +117,7 @@ export class PrologueScene extends Phaser.Scene {
       this.hintText.setText('PRESIONA ENTER PARA CONTINUAR...');
       this.hintText.setAlpha(1);
       this.input.keyboard?.off('keydown-ENTER', this.advance, this);
-      this.input.keyboard?.once('keydown-ENTER', () => this.scene.start('GameScene'));
+      this.input.keyboard?.once('keydown-ENTER', this.startGame, this);
     }
   }
 }

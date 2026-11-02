@@ -1,16 +1,23 @@
 import Phaser from 'phaser';
 import { ENEMY_CONFIG } from '../config/CombatConfig';
+import { getEnemyTierPressure, type EnemyDifficultyProfile, type PlayerTier } from '../config/ProgressionConfig';
 
 export type EnemyState = 'Idle' | 'Patrolling' | 'Moving' | 'Searching' | 'Aiming' | 'Shooting' | 'Hit' | 'Dying';
 
 export class Enemy extends Phaser.Physics.Arcade.Image {
-  public health = ENEMY_CONFIG.maxHealth;
-  public readonly maxHealth = ENEMY_CONFIG.maxHealth;
+  public health: number;
+  public maxHealth: number;
   public state: EnemyState = 'Idle';
   public hasLineOfSight = false;
   public nextLineOfSightCheck = 0;
-  public readonly patrolArea: Phaser.Geom.Rectangle;
+
+  get detectionRange(): number { return this.difficulty.detectionRange; }
+  get projectileDamage(): number { return this.difficulty.projectileDamage; }
+  get projectileSpeed(): number { return this.difficulty.projectileSpeed; }
+  get projectileRange(): number { return this.difficulty.projectileRange; }
+  public patrolArea: Phaser.Geom.Rectangle;
   private readonly healthBar: Phaser.GameObjects.Graphics;
+  private difficulty: EnemyDifficultyProfile;
   private patrolTarget = new Phaser.Math.Vector2();
   private nextPatrolDecision = 0;
   private idleUntil = 0;
@@ -21,6 +28,8 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
   private shootingUntil = 0;
   private hitUntil = 0;
   private dead = false;
+  private pursuitSpeedMultiplier = 1;
+  private fireRateMultiplier = 1;
 
   constructor(
     scene: Phaser.Scene,
@@ -28,17 +37,72 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     y: number,
     patrolArea: Phaser.Geom.Rectangle,
     seedOffset: number,
+    difficulty: EnemyDifficultyProfile,
   ) {
     super(scene, x, y, 'zombie_soldier_1');
     this.patrolArea = patrolArea;
+    this.difficulty = difficulty;
+    this.maxHealth = Math.round(ENEMY_CONFIG.maxHealth * difficulty.healthMultiplier);
+    this.health = this.maxHealth;
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDisplaySize(ENEMY_CONFIG.displayWidth, ENEMY_CONFIG.displayHeight).setDepth(10);
-    this.setCollideWorldBounds(true).setDrag(0, 0).setMaxVelocity(ENEMY_CONFIG.moveSpeed);
+    this.setCollideWorldBounds(true).setDrag(0, 0).setMaxVelocity(difficulty.moveSpeed);
     this.body?.setSize(130, 130, true);
     this.healthBar = scene.add.graphics().setDepth(13);
-    this.nextShotAt = scene.time.now + 700 + (seedOffset % 900);
+    this.resetForWave(x, y, patrolArea, seedOffset, difficulty);
+  }
+
+  /** Reutiliza una entidad ya creada para otra oleada, evitando asignaciones continuas. */
+  resetForWave(
+    x: number,
+    y: number,
+    patrolArea: Phaser.Geom.Rectangle,
+    seedOffset: number,
+    difficulty: EnemyDifficultyProfile,
+  ): void {
+    this.difficulty = difficulty;
+    this.patrolArea.setTo(patrolArea.x, patrolArea.y, patrolArea.width, patrolArea.height);
+    this.maxHealth = Math.round(ENEMY_CONFIG.maxHealth * difficulty.healthMultiplier);
+    this.health = this.maxHealth;
+    this.state = 'Idle';
+    this.hasLineOfSight = false;
+    this.nextLineOfSightCheck = 0;
+    this.nextPatrolDecision = 0;
+    this.idleUntil = 0;
+    this.nextSearchDecision = 0;
+    this.aimStartedAt = 0;
+    this.shootingUntil = 0;
+    this.hitUntil = 0;
+    this.dead = false;
+    this.pursuitSpeedMultiplier = 1;
+    this.fireRateMultiplier = 1;
+    this.nextShotAt = this.scene.time.now + 700 + (seedOffset % 900);
+    this.setPosition(x, y).setActive(true).setVisible(true).setAlpha(1).clearTint();
+    this.setDisplaySize(ENEMY_CONFIG.displayWidth, ENEMY_CONFIG.displayHeight);
+    this.setRotation(0).setVelocity(0, 0);
+    const body = this.body as Phaser.Physics.Arcade.Body | null;
+    if (body) {
+      body.enable = true;
+      body.reset(x, y);
+      body.setSize(130, 130, true);
+      body.setCollideWorldBounds(true);
+      body.setMaxVelocity(difficulty.moveSpeed);
+    }
+    this.healthBar.clear().setVisible(true);
     this.choosePatrolTarget();
+  }
+
+  /** Ajusta persecución y cadencia cuando el operador desbloquea un personaje superior. */
+  setPlayerTierPressure(tier: PlayerTier): void {
+    const pressure = getEnemyTierPressure(tier);
+    this.pursuitSpeedMultiplier = pressure.pursuitSpeedMultiplier;
+    this.fireRateMultiplier = pressure.fireRateMultiplier;
+    (this.body as Phaser.Physics.Arcade.Body | null)?.setMaxVelocity(
+      this.difficulty.moveSpeed * this.pursuitSpeedMultiplier,
+    );
+    const adjustedFireRate = Math.max(520, Math.round(this.difficulty.fireRateMs * this.fireRateMultiplier));
+    this.nextShotAt = Math.min(this.nextShotAt, this.scene.time.now + adjustedFireRate);
   }
 
   shouldRefreshLineOfSight(now: number): boolean {
@@ -67,7 +131,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     const angle = Math.atan2(dy, dx);
     this.setRotation(angle + Math.PI / 2);
 
-    if (distance > ENEMY_CONFIG.detectionRange) {
+    if (distance > this.difficulty.detectionRange) {
       this.updatePatrol(now);
       return;
     }
@@ -82,32 +146,34 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
         );
         this.nextSearchDecision = now + 1300;
       }
-      this.moveTowards(this.searchTarget.x, this.searchTarget.y, ENEMY_CONFIG.moveSpeed * 0.9);
+      this.moveTowards(this.searchTarget.x, this.searchTarget.y,
+        this.difficulty.moveSpeed * 0.9 * this.pursuitSpeedMultiplier);
       return;
     }
 
-    if (distance > ENEMY_CONFIG.preferredDistance + 55) {
+    if (distance > this.difficulty.preferredDistance + 55) {
       this.state = 'Moving';
       this.aimStartedAt = 0;
-      this.moveTowards(playerX, playerY, ENEMY_CONFIG.moveSpeed);
-    } else if (distance < ENEMY_CONFIG.minimumDistance) {
+      this.moveTowards(playerX, playerY, this.difficulty.moveSpeed * this.pursuitSpeedMultiplier);
+    } else if (distance < this.difficulty.minimumDistance) {
       this.state = 'Moving';
       this.aimStartedAt = 0;
       this.moveAwayFrom(playerX, playerY);
     } else {
       this.setVelocity(0, 0);
-      if (distance <= ENEMY_CONFIG.weaponRange) {
+      if (distance <= this.difficulty.weaponRange) {
         if (now < this.shootingUntil) {
           this.state = 'Shooting';
         } else {
           this.state = 'Aiming';
           if (this.aimStartedAt === 0) this.aimStartedAt = now;
-          if (now >= this.nextShotAt && now - this.aimStartedAt >= ENEMY_CONFIG.aimTimeMs) {
+          if (now >= this.nextShotAt && now - this.aimStartedAt >= this.difficulty.aimTimeMs) {
             this.state = 'Shooting';
             this.shootingUntil = now + 120;
-            this.nextShotAt = now + ENEMY_CONFIG.fireRateMs;
+            const adjustedFireRate = Math.max(520, Math.round(this.difficulty.fireRateMs * this.fireRateMultiplier));
+            this.nextShotAt = now + adjustedFireRate;
             this.aimStartedAt = 0;
-            shoot(this, angle);
+            shoot(this, angle + Phaser.Math.FloatBetween(-this.difficulty.aimSpreadRadians, this.difficulty.aimSpreadRadians));
           }
         }
       } else {
@@ -116,8 +182,18 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     }
   }
 
+  /** Desactiva la entidad para devolverla al pool sin destruir su sprite ni barra. */
+  deactivateForPool(): void {
+    this.setVelocity(0, 0).setActive(false).setVisible(false);
+    const body = this.body as Phaser.Physics.Arcade.Body | null;
+    if (body) body.enable = false;
+    this.healthBar.setVisible(false);
+    this.dead = true;
+    this.state = 'Dying';
+  }
+
   takeDamage(amount: number, now: number): boolean {
-    if (this.dead || !this.active) return this.dead;
+    if (this.dead || !this.active) return false;
     this.health = Math.max(0, this.health - amount);
     this.updateHealthBar();
     this.hitUntil = now + ENEMY_CONFIG.hitRecoveryMs;
@@ -163,7 +239,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
       return;
     }
     this.state = 'Patrolling';
-    this.moveTowards(this.patrolTarget.x, this.patrolTarget.y, ENEMY_CONFIG.patrolSpeed);
+    this.moveTowards(this.patrolTarget.x, this.patrolTarget.y, this.difficulty.patrolSpeed);
   }
 
   private choosePatrolTarget(): void {
@@ -188,7 +264,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
   private moveAwayFrom(x: number, y: number): void {
     const direction = new Phaser.Math.Vector2(this.x - x, this.y - y);
     if (direction.lengthSq() < 1) direction.set(1, 0);
-    direction.normalize().scale(ENEMY_CONFIG.moveSpeed * 0.78);
+    direction.normalize().scale(this.difficulty.moveSpeed * 0.78 * this.pursuitSpeedMultiplier);
     this.setVelocity(direction.x, direction.y);
   }
 

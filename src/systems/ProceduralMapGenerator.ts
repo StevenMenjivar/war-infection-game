@@ -17,8 +17,8 @@ const keyOf = (x: number, y: number): string => `${x},${y}`;
 /** Genera una red reproducible de habitaciones y pasillos sobre una cuadrícula. */
 export class ProceduralMapGenerator {
   constructor(
-    private readonly columns = 54,
-    private readonly rows = 40,
+    private readonly columns = 64,
+    private readonly rows = 48,
     private readonly cellSize = 52,
   ) {}
 
@@ -30,14 +30,16 @@ export class ProceduralMapGenerator {
     };
     const floor = new Set<string>();
     const rooms: Room[] = [];
-    const xSlots = [2, 19, 36];
-    const ySlots = [2, 15, 28];
+    // La retícula deja la sala 8 más grande y dedicada a la arena final.
+    const xSlots = [2, 21, 40];
+    const ySlots = [2, 17, 32];
 
     // Nueve salas en una retícula de sectores: no se solapan y dejan espacio para conexiones.
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
-        const width = 10 + Math.floor(random() * 3);
-        const height = 7 + Math.floor(random() * 3);
+        const isFinalArena = row === 2 && col === 2;
+        const width = isFinalArena ? 20 : 10 + Math.floor(random() * 3);
+        const height = isFinalArena ? 14 : 7 + Math.floor(random() * 3);
         const room: Room = {
           id: rooms.length,
           x: xSlots[col], y: ySlots[row], width, height,

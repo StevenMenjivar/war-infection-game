@@ -1202,3 +1202,50 @@ Mantén el código modular y legible.
 Trabaja de manera incremental, verifica cada fase y asegúrate de que las funcionalidades anteriores continúen funcionando después de cada nueva implementación.
 
 **El objetivo final es entregar un videojuego web completo, funcional, optimizado y mantenible: WAR INFECTION.**
+
+---
+
+# Registro de implementación — Fase 7 (2026-11-01)
+
+- Se implementó iluminación ambiental por capas para atenuar progresivamente las zonas alejadas sin convertir el escenario en una pantalla negra.
+- Linterna inicialmente apagada, alternable con `L`, orientada según el mismo ángulo de apuntado del jugador; apertura fija de 62° y alcance de 690 px, configurables en `src/config/LightingConfig.ts`.
+- Oclusión de la linterna mediante un polígono de visibilidad calculado por rayos contra los rectángulos de paredes y coberturas. Se agregan rayos en los vértices para reducir fugas en esquinas.
+- En WebGL se utilizan máscaras geométricas invertidas para revelar el área iluminada; en Canvas hay un fallback visual de menor contraste con el haz recortado por la misma geometría.
+- Se agregaron sombras desplazadas de paredes/coberturas, niebla sutil, motas de polvo animadas y destellos de disparo por encima de la oscuridad.
+- La configuración se mantiene separada en `LightingConfig.ts`; la geometría pura está en `VisibilityGeometry.ts` y el ciclo de renderizado en `FlashlightSystem.ts`.
+- Validación local del agente: 29 pruebas automatizadas aprobadas; transpilación sintáctica de 22 archivos TypeScript sin diagnósticos; raycast verificado con escenario libre, muro frontal y obstáculo fuera del ángulo. No se pudo completar `npm install`, `npm run typecheck`, `npm run build` ni ejecución visual en navegador en el entorno de desarrollo.
+
+
+---
+
+# Estado de implementación: Fase 8 (01-11-2026)
+
+- La linterna apagada usa radios ambientales reducidos (`78`, `138`, `218` px) y opacidad de oscuridad elevada (`0.24`, `0.28`, `0.32`). Al encenderla se restablecen radios mayores y menor oscuridad ambiental. Canvas también diferencia ambos estados.
+- La evolución del jugador aumenta la presión enemiga: Soldado II aplica +12% a velocidad de persecución y +14% a frecuencia de disparo; Soldado III aplica +25% y +35%. Se actualizan enemigos activos y nuevos refuerzos, incluyendo el máximo de velocidad de sus cuerpos Arcade.
+- La pausa ESC abre un menú modal con Continuar, Reiniciar partida y Menú principal. Se detienen física, reloj de escena y tweens sin bloquear la interfaz.
+- Game Over incluye Reintentar y Regresar al menú.
+- NameInput vuelve a limpiar el campo cada vez que se abre, manteniendo validación 3–18 caracteres y Enter.
+- Se añade VictoryScene con `YOU WON!`, el subtítulo de rescate y retorno al menú. Su activación se enlazará a la resolución de la última oleada en Fase 9.
+- Se añade CheckpointSystem que captura posición, personaje, salud máxima y bajas, y calcula una reaparición con 50% de la salud máxima. La activación y reinicio de oleadas se enlazarán con la arena final en Fase 9, que aún no está implementada.
+
+
+---
+
+# Estado de implementación — Fase 9
+
+- Sala final expandida a 20×14 celdas dentro de un mapa 64×48 con ruta validada.
+- Arena con barricadas sólidas y entrada tras completar las 27 bajas de campaña.
+- Oleadas simultáneas de 12, 24 y 50 enemigos con aparición en cuatro lados.
+- Presión global de Fase 9: +50% a velocidad/patrullaje y +50% a frecuencia de disparo en todos los perfiles; se acumula con presión por sala, nivel del operador y oleada.
+- Mayor oscuridad ambiental y radio mínimo de orientación cuando la linterna está apagada.
+- Checkpoint capturado al entrar en arena; la pantalla de reintento conserva personaje/posición, restaura 50% de salud máxima y reinicia únicamente las oleadas.
+- La última oleada activa la escena de victoria al eliminar a todos sus enemigos.
+
+
+# Estado de implementación — Fase 10
+
+- Botones de pausa y Game Over reemplazados por hit-areas rectangulares interactivas fijadas individualmente a la cámara, fuera de contenedores transformados. Todas las acciones (continuar, reiniciar y menú) se conectan a callbacks directos.
+- `PrologueScene.create()` restablece `lineIndex`, palabras visibles, estado de escritura y temporizadores en cada entrada; listeners Enter se limpian en SHUTDOWN y el arranque de GameScene está protegido contra dobles transiciones. `NameInputScene` evita envíos duplicados.
+- Las barricadas y obstáculos centrales de extracción fueron retirados; se mantienen las coberturas de las salas de campaña.
+- Se duplicó la campaña: 28 enemigos iniciales (4 en cada una de 7 salas) y 26 refuerzos; la horda se habilita después de 54 bajas de campaña. Los hitos de evolución se conservan en 11 y 27 bajas.
+- Se actualizó README e inventario/estructura del proyecto.
