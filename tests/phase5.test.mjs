@@ -67,7 +67,7 @@ test('los impactos y la muerte muestran partículas, sangre y Game Over', () => 
 
 test('reintentar reinicia salud, contador, arma, disparo y pausa', () => {
   const scene = read('../src/scenes/GameScene.ts');
-  for (const token of ['this.playerHealth = PLAYER_COMBAT_CONFIG.maxHealth', 'this.kills = 0', 'this.currentWeapon = WEAPONS.m416', 'this.nextPlayerShotAt = 0', 'this.playerDead = false', 'this.physics.world.isPaused = false']) {
+  for (const token of ['this.playerHealth = PLAYER_TIERS[1].maxHealth', 'this.playerMaxHealth = PLAYER_TIERS[1].maxHealth', 'this.kills = 0', 'this.currentWeapon = WEAPONS.m416', 'this.nextPlayerShotAt = 0', 'this.playerDead = false', 'this.physics.world.isPaused = false']) {
     assert.ok(scene.includes(token), `Falta reinicio de estado: ${token}`);
   }
 });

@@ -41,8 +41,17 @@ export const PLAYER_COMBAT_CONFIG = {
   muzzleOffset: 49,
 };
 
+/** Campaña ampliada de Fase 10: duplica objetivos iniciales y refuerzos. */
+export const CAMPAIGN_CONFIG = {
+  combatRoomCount: 7,
+  initialEnemiesPerRoom: 4,
+  initialEnemyCount: 28,
+  reinforcementCount: 26,
+  totalEnemyCount: 54,
+} as const;
+
 export const ENEMY_CONFIG = {
-  initialCountPerRoom: 2,
+  initialCountPerRoom: CAMPAIGN_CONFIG.initialEnemiesPerRoom,
   maxHealth: 96,
   displayWidth: 64,
   displayHeight: 102,
@@ -66,7 +75,7 @@ export const ENEMY_CONFIG = {
 
 export const COMBAT_CONFIG = {
   maxPlayerProjectiles: 180,
-  maxEnemyProjectiles: 120,
+  maxEnemyProjectiles: 220,
   projectileRadius: 4,
   hitParticles: 8,
   hitParticleLifeMs: 260,
