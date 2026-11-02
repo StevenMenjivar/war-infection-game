@@ -1,30 +1,62 @@
-# War Infection — Fase 3
+# War Infection
 
-Videojuego web top-down shooter en Phaser 3 + TypeScript + Vite.
+Videojuego 2D top-down shooter de supervivencia militar, desarrollado con Phaser 3, TypeScript y Vite.
 
 ## Requisitos
-- Node.js 20.19+ o 22.12+ (requerido por Vite 8).
+
+- Node.js 20.19+ o 22.12+ (compatible con Vite 8).
 - npm.
 
-## Instalación y ejecución
+## Ejecutar localmente
+
 ```bash
 npm install
 npm run dev
 ```
 
-## Validación
+Abre la URL local que muestra Vite.
+
+## Comandos de validación
+
 ```bash
+npm test
 npm run typecheck
 npm run build
-npm test
 ```
 
-## Flujo implementado en esta fase
-1. Boot y precarga de recursos.
-2. Menú principal con estética militar/terror y botón **Jugar ahora**.
-3. Ingreso de nombre (3–18 caracteres, letras, números, espacios, guion y guion bajo); Enter confirma y Escape vuelve al menú.
-4. Prólogo con el diálogo especificado, palabra por palabra. Enter completa la línea actual o avanza a la siguiente.
-5. Escena de entrenamiento con soldier_1, movimiento WASD normalizado, orientación al cursor, cámara de seguimiento y pausa con Escape.
+## Estado de implementación
 
-## Alcance pendiente
-La escena de entrenamiento todavía no representa la campaña: mapa procedural, colisiones con paredes/objetos, combate, enemigos, HUD definitivo, linterna, progresión, oleadas y finales se implementarán en fases posteriores. La pantalla `AssetPreviewScene` se conserva para inspección manual, pero ya no es la escena inicial.
+- **Fase 1:** inspección y arquitectura de recursos.
+- **Fase 2:** configuración de Phaser/Vite/TypeScript y carga de recursos.
+- **Fase 3:** menú, captura de nombre, prólogo y controles iniciales.
+- **Fase 4:** mapa procedural de nueve salas, pasillos, paredes, coberturas y colisiones.
+- **Fase 5:** perfiles de armas, disparo automático al mantener clic, proyectiles reutilizables con alcance, colisiones de proyectiles, enemigos armados, patrullaje/seguimiento/búsqueda, línea de visión y mira láser bloqueadas por obstáculos, mantenimiento de distancia, separación, barras de vida, daño, partículas, transición de muerte y Game Over.
+
+## Controles
+
+- **WASD:** movimiento omnidireccional.
+- **Mouse:** apuntar.
+- **Clic izquierdo sostenido:** disparar.
+- **ESC:** pausar/reanudar.
+
+El jugador comienza con la Carabina M416. La configuración de Benelli M4 y Minigun ya está centralizada para que la Fase 6 pueda cambiar de arma al evolucionar el personaje. La munición es infinita.
+
+## Alcance de la Fase 5
+
+Se generan dos enemigos por cada una de siete salas de combate (14 enemigos iniciales). Cada enemigo utiliza `zombie_soldier_1.png`, patrulla en su sala, detecta al jugador, comprueba línea de visión, busca una posición alternativa, se aproxima o retrocede según la distancia y dispara cuando tiene una trayectoria libre. Los enemigos no atacan cuerpo a cuerpo.
+
+La salud del jugador se incluye como soporte funcional del combate enemigo. Los botiquines, las evoluciones y la dificultad progresiva se mantienen para la Fase 6.
+
+## Estructura principal
+
+```text
+src/
+  config/       Configuración general, armas y balance
+  entities/     Entidades del juego (enemigos)
+  managers/     Gestores
+  scenes/       Escenas Phaser
+  systems/      Generación procedural, geometría y sistemas de juego
+  utils/        Utilidades
+assets/images/  Recursos gráficos originales
+ tests/         Pruebas automatizadas
+```

@@ -42,6 +42,7 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('minigun', ASSET_PATHS.weapons.minigun);
     this.load.image('blood', ASSET_PATHS.effects.blood);
     this.load.image('use_case', ASSET_PATHS.reference.useCase);
+    this.load.image('floor_tile', 'assets/images/tiles/BasicConstruction__0000s_0003s_0001_Floor-surface.png');
     TILE_ASSET_PATHS.forEach((path, index) => this.load.image(`tile_${index}`, path));
 
     this.load.start();
