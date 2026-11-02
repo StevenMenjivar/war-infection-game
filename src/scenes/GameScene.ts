@@ -14,6 +14,7 @@ import { getOtherCollisionObject } from '../systems/CollisionPair';
 import { FlashlightSystem } from '../systems/FlashlightSystem';
 import { CheckpointSystem } from '../systems/CheckpointSystem';
 import { HordeWaveSystem, type HordeWaveState } from '../systems/HordeWaveSystem';
+import { TILE_TEXTURE_KEYS } from '../config/tileAssets';
 
 const PLAYER_SPEED = 230;
 const PLAYER_DISPLAY_WIDTH = 70;
@@ -27,7 +28,6 @@ const ENEMY_BULLET_TEXTURE = 'enemy_projectile';
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Image;
   private cursors!: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>;
-  private pauseObjects: Phaser.GameObjects.GameObject[] = [];
   private isGamePaused = false;
   private walls!: Phaser.Physics.Arcade.StaticGroup;
   private obstacles!: Phaser.Physics.Arcade.StaticGroup;
@@ -69,6 +69,8 @@ export class GameScene extends Phaser.Scene {
   private nextPlayerShotAt = 0;
   private playerDead = false;
   private reinforcementsSpawned = false;
+  private gameOverShown = false;
+  private victoryTransitionStarted = false;
 
   constructor() { super('GameScene'); }
 
@@ -80,6 +82,8 @@ export class GameScene extends Phaser.Scene {
     this.progression = new ProgressionSystem();
     this.enemyPool = [];
     this.reinforcementsSpawned = false;
+    this.gameOverShown = false;
+    this.victoryTransitionStarted = false;
     this.horde.reset();
     this.checkpoint.clear();
     this.hordeStarted = false;
@@ -96,7 +100,6 @@ export class GameScene extends Phaser.Scene {
     this.time.paused = false;
     this.tweens.resumeAll();
     this.isGamePaused = false;
-    this.pauseObjects = [];
 
     this.cameras.main.setBackgroundColor('#080d0a');
     this.map = new ProceduralMapGenerator().generate(COMBAT_CONFIG.initialSeed);
@@ -126,8 +129,10 @@ export class GameScene extends Phaser.Scene {
     this.createProjectileTextures();
     this.createPickupTextures();
     this.renderFloor();
+    this.createFloorDressing();
     this.createWalls();
     this.createCover();
+    this.createEnvironmentalProps();
     this.createAmbientEffects();
     this.createMedkitPickups();
     this.createPlayer();
@@ -153,15 +158,18 @@ export class GameScene extends Phaser.Scene {
       keyboard.off('keydown-ESC', this.togglePause, this);
       keyboard.off('keydown-L', this.toggleFlashlight, this);
       this.events.off('checkpoint-retry', this.restartHordeAtCheckpoint, this);
+      this.events.off(Phaser.Scenes.Events.RESUME, this.handleSceneResume, this);
       this.waveAdvanceEvent?.remove(false);
       this.waveAdvanceEvent = undefined;
       this.time.removeAllEvents();
       this.tweens.killAll();
-      this.clearPauseOverlay();
       this.enemyPool = [];
       this.physics.world.isPaused = false;
     });
+    this.events.off('checkpoint-retry', this.restartHordeAtCheckpoint, this);
+    this.events.off(Phaser.Scenes.Events.RESUME, this.handleSceneResume, this);
     this.events.on('checkpoint-retry', this.restartHordeAtCheckpoint, this);
+    this.events.on(Phaser.Scenes.Events.RESUME, this.handleSceneResume, this);
   }
 
   update(_time: number, _delta: number): void {
@@ -206,13 +214,13 @@ export class GameScene extends Phaser.Scene {
   private createProjectileTextures(): void {
     if (this.textures.exists(PLAYER_BULLET_TEXTURE) && this.textures.exists(ENEMY_BULLET_TEXTURE)) return;
     if (!this.textures.exists(PLAYER_BULLET_TEXTURE)) {
-      const playerGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+      const playerGraphics = this.make.graphics({ x: 0, y: 0 });
       playerGraphics.fillStyle(0xffffff, 1).fillRoundedRect(0, 1, 14, 5, 2);
       playerGraphics.generateTexture(PLAYER_BULLET_TEXTURE, 14, 7);
       playerGraphics.destroy();
     }
     if (!this.textures.exists(ENEMY_BULLET_TEXTURE)) {
-      const enemyGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+      const enemyGraphics = this.make.graphics({ x: 0, y: 0 });
       enemyGraphics.fillStyle(0xffffff, 1).fillRoundedRect(0, 1, 12, 5, 2);
       enemyGraphics.generateTexture(ENEMY_BULLET_TEXTURE, 12, 7);
       enemyGraphics.destroy();
@@ -221,7 +229,7 @@ export class GameScene extends Phaser.Scene {
 
   private createPickupTextures(): void {
     if (!this.textures.exists('medkit_pickup')) {
-      const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+      const graphics = this.make.graphics({ x: 0, y: 0 });
       graphics.fillStyle(0x15291b, 1).fillRoundedRect(1, 1, 34, 34, 6);
       graphics.lineStyle(2, 0xb5d98b, 1).strokeRoundedRect(1, 1, 34, 34, 6);
       graphics.fillStyle(0xe7f0df, 1).fillRect(14, 7, 8, 22).fillRect(7, 14, 22, 8);
@@ -243,7 +251,11 @@ export class GameScene extends Phaser.Scene {
       const offset = offsets.find((candidate) => {
         const candidateX = (room.x + candidate.x) * this.map.cellSize;
         const candidateY = (room.y + candidate.y) * this.map.cellSize;
-        return !blockers.some((object) => object.getBounds().contains(candidateX, candidateY));
+        return !blockers.some((object) => {
+          const bounds = this.getObjectBounds(object);
+          return candidateX >= bounds.left - 24 && candidateX <= bounds.right + 24
+            && candidateY >= bounds.top - 24 && candidateY <= bounds.bottom + 24;
+        });
       }) ?? { x: room.width / 2, y: room.height / 2 };
       const x = (room.x + offset.x) * this.map.cellSize;
       const y = (room.y + offset.y) * this.map.cellSize;
@@ -309,20 +321,22 @@ export class GameScene extends Phaser.Scene {
 
   private createCover(): void {
     const size = this.map.cellSize;
-    const placements: GridPoint[] = [];
-    this.map.rooms.slice(1, 8).forEach((room, index) => {
-      if (index % 2 === 0) placements.push({ x: room.x + room.width - 3, y: room.y + 3 });
-      else placements.push({ x: room.x + 3, y: room.y + room.height - 3 });
-    });
-    placements.forEach((point, index) => {
-      const x = (point.x + 0.5) * size;
-      const y = (point.y + 0.5) * size;
-      const horizontal = index % 2 === 0;
-      const width = horizontal ? 72 : 30;
-      const height = horizontal ? 30 : 72;
-      this.add.rectangle(x + 8, y + 9, width, height, 0x000000, 0.28).setDepth(5.5);
+    // Solo dos coberturas pequeñas en toda la campaña; las salas y corredores
+    // permanecen mayormente abiertos para que la IA pueda perseguir al jugador.
+    const placements = [
+      { roomIndex: 2, x: 1.9, y: 1.9, horizontal: true },
+      { roomIndex: 6, x: 1.9, y: 1.9, horizontal: false },
+    ];
+    placements.forEach((placement) => {
+      const room = this.map.rooms[placement.roomIndex];
+      if (!room) return;
+      const x = (room.x + placement.x) * size;
+      const y = (room.y + placement.y) * size;
+      const width = placement.horizontal ? 44 : 22;
+      const height = placement.horizontal ? 22 : 44;
+      this.add.rectangle(x + 5, y + 6, width, height, 0x000000, 0.22).setDepth(5.5);
       this.obstacles.add(this.add.rectangle(x, y, width, height, 0x4b5148, 1)
-        .setStrokeStyle(2, 0x899080).setDepth(6));
+        .setStrokeStyle(1, 0x899080).setDepth(6));
     });
 
     // El área de extracción queda despejada: no se colocan barricadas ni obstáculos físicos aquí.
@@ -330,6 +344,129 @@ export class GameScene extends Phaser.Scene {
     const centerX = (arena.x + arena.width / 2) * size;
     const centerY = (arena.y + arena.height / 2) * size;
     this.add.circle(centerX, centerY, 24, 0x9e342d, 0.2).setStrokeStyle(2, 0xd57f5f, 0.55).setDepth(3);
+  }
+
+  /**
+   * Distribuye manchas, rejillas y reflejos en el piso, siguiendo la composición
+   * industrial de UseCaseExample. Estos elementos son puramente visuales.
+   */
+  private createFloorDressing(): void {
+    const size = this.map.cellSize;
+    const decorPositions = [
+      { x: 2.8, y: 2.5, rotation: -0.22 },
+      { x: 7.4, y: 5.6, rotation: 0.18 },
+      { x: 2.6, y: 5.5, rotation: 0.45 },
+    ];
+    const floorDirtKeys = [TILE_TEXTURE_KEYS.floorGrungeA, TILE_TEXTURE_KEYS.floorGrungeB];
+    const reflectionKeys = [TILE_TEXTURE_KEYS.ventilator, TILE_TEXTURE_KEYS.hole, TILE_TEXTURE_KEYS.lattice];
+
+    this.map.rooms.forEach((room, roomIndex) => {
+      // Manchas de suciedad: se colocan sobre el piso, sin cuerpos físicos.
+      const dirtA = decorPositions[roomIndex % decorPositions.length]!;
+      const dirtB = decorPositions[(roomIndex + 1) % decorPositions.length]!;
+      this.addFloorTileDecoration(
+        floorDirtKeys[roomIndex % floorDirtKeys.length]!,
+        (room.x + dirtA.x) * size,
+        (room.y + dirtA.y) * size,
+        86, 94, 0.19, Phaser.BlendModes.MULTIPLY, dirtA.rotation, 1.15,
+      );
+      this.addFloorTileDecoration(
+        floorDirtKeys[(roomIndex + 1) % floorDirtKeys.length]!,
+        (room.x + Math.min(room.width - 2.4, dirtB.x)) * size,
+        (room.y + Math.min(room.height - 1.8, dirtB.y)) * size,
+        72, 82, 0.15, Phaser.BlendModes.MULTIPLY, -dirtB.rotation, 1.16,
+      );
+
+      // Partículas finas de desgaste repartidas sobre algunas losetas.
+      const dotX = (room.x + room.width * (0.36 + (roomIndex % 3) * 0.08)) * size;
+      const dotY = (room.y + room.height * (0.64 - (roomIndex % 2) * 0.12)) * size;
+      this.addFloorTileDecoration(
+        TILE_TEXTURE_KEYS.floorDots, dotX, dotY, 64, 72, 0.12,
+        Phaser.BlendModes.MULTIPLY, roomIndex * 0.31, 1.18,
+      );
+
+      // Rejillas, perforaciones y ventiladores son reflejos/decalques, no obstáculos.
+      const reflection = reflectionKeys[roomIndex % reflectionKeys.length]!;
+      const reflectX = (room.x + room.width * (roomIndex % 2 === 0 ? 0.72 : 0.28)) * size;
+      const reflectY = (room.y + room.height * 0.48) * size;
+      const isLattice = reflection === TILE_TEXTURE_KEYS.lattice;
+      this.addFloorTileDecoration(
+        reflection, reflectX, reflectY, isLattice ? 112 : 78, isLattice ? 62 : 78,
+        0.15, Phaser.BlendModes.SCREEN, roomIndex * 0.37, 1.32,
+      );
+      this.add.ellipse(reflectX + 12, reflectY + 13, 116, 36, 0xb9d5cc, 0.045)
+        .setRotation(-0.32 + roomIndex * 0.08)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(1.25);
+    });
+  }
+
+  private addFloorTileDecoration(
+    textureKey: string, x: number, y: number, width: number, height: number,
+    alpha: number, blendMode: Phaser.BlendModes, rotation: number, depth: number,
+  ): Phaser.GameObjects.Image {
+    return this.add.image(x, y, textureKey)
+      .setDisplaySize(width, height)
+      .setRotation(rotation)
+      .setAlpha(alpha)
+      .setBlendMode(blendMode)
+      .setDepth(depth);
+  }
+
+  /**
+   * Props sólidos basados únicamente en los tiles solicitados: espuma,
+   * climatización antigua y superficies de ventilación. Sus cuerpos estáticos
+   * también se convierten en bloqueadores de proyectiles, visión y linterna.
+   */
+  private createEnvironmentalProps(): void {
+    const size = this.map.cellSize;
+    // Tres props físicos compactos repartidos por la campaña, no uno por sala.
+    // Se mantienen lejos de los centros de aparición y de los ejes de los pasillos.
+    const placements = [
+      { roomIndex: 1, key: TILE_TEXTURE_KEYS.foamNozzle, width: 34, height: 32, category: 'FOAM', x: 1.65, y: 1.65, rotation: -0.12 },
+      { roomIndex: 4, key: TILE_TEXTURE_KEYS.climateControlSurface, width: 46, height: 36, category: 'OLD_CLIMATE', x: 1.65, y: 1.65, rotation: 0.10 },
+      { roomIndex: 7, key: TILE_TEXTURE_KEYS.ventilationSurface, width: 40, height: 40, category: 'VENTILATION_SURFACE', x: 1.65, y: 1.65, rotation: -0.08 },
+    ];
+
+    placements.forEach((placement) => {
+      const room = this.map.rooms[placement.roomIndex];
+      if (!room) return;
+      const x = (room.x + placement.x) * size;
+      const y = (room.y + placement.y) * size;
+      const centerX = (room.center.x + 0.5) * size;
+      const centerY = (room.center.y + 0.5) * size;
+      if (Phaser.Math.Distance.Between(x, y, centerX, centerY) < 190) return;
+
+      const halfWidth = placement.width * 0.5;
+      const halfHeight = placement.height * 0.5;
+      const overlapsExisting = [...this.walls.getChildren(), ...this.obstacles.getChildren()].some((object) => {
+        const bounds = this.getObjectBounds(object);
+        return x + halfWidth + 8 > bounds.left && x - halfWidth - 8 < bounds.right
+          && y + halfHeight + 8 > bounds.top && y - halfHeight - 8 < bounds.bottom;
+      });
+      if (overlapsExisting) return;
+
+      const prop = this.obstacles.create(x, y, placement.key) as Phaser.Physics.Arcade.Image;
+      prop.setDisplaySize(placement.width, placement.height)
+        .setRotation(placement.rotation)
+        .setDepth(6.6)
+        .setAlpha(0.96);
+      prop.setData('environmentCategory', placement.category);
+      prop.refreshBody();
+    });
+  }
+
+  /** Prioriza el AABB físico para que la colisión, la visión y la linterna compartan tamaño real. */
+  private getObjectBounds(object: Phaser.GameObjects.GameObject): Phaser.Geom.Rectangle {
+    const withBody = object as Phaser.GameObjects.GameObject & {
+      body?: { x: number; y: number; width: number; height: number; enable?: boolean };
+    };
+    const body = withBody.body;
+    if (body && body.width > 0 && body.height > 0) {
+      return new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height);
+    }
+    const bounded = object as Phaser.GameObjects.GameObject & { getBounds: () => Phaser.Geom.Rectangle };
+    return bounded.getBounds();
   }
 
   private createPlayer(): void {
@@ -350,7 +487,7 @@ export class GameScene extends Phaser.Scene {
   private createLighting(): void {
     const blockers = [...this.walls.getChildren(), ...this.obstacles.getChildren()];
     this.lightingBlockers = blockers.map((object) => {
-      const bounds = object.getBounds();
+      const bounds = this.getObjectBounds(object);
       return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom };
     });
     this.lighting = new FlashlightSystem(this, this.worldWidth, this.worldHeight);
@@ -404,7 +541,7 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '11px', color: '#a9b39f',
       backgroundColor: '#0a100ddd', padding: { x: 10, y: 6 },
     }).setScrollFactor(0).setDepth(20);
-    this.add.text(GAME_WIDTH - 24, 20, `FASE 9  //  HORDA FINAL\nSEED: ${this.map.seed}`, {
+    this.add.text(GAME_WIDTH - 24, 20, `FASE 11  //  SUPERVIVENCIA\nSEED: ${this.map.seed}`, {
       fontFamily: 'monospace', fontSize: '11px', color: '#b5d58a', align: 'right',
       backgroundColor: '#0a100ddd', padding: { x: 12, y: 9 },
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(20);
@@ -413,12 +550,21 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '11px', color: '#d7c58d', align: 'right',
       backgroundColor: '#0a100ddd', padding: { x: 10, y: 6 },
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(20);
-    this.weaponText = this.add.text(24, GAME_HEIGHT - 78, `${this.currentWeapon.displayName}  //  MUNICIÓN ∞`, {
-      fontFamily: 'monospace', fontSize: '12px', color: '#f1d78a',
-      backgroundColor: '#0a100ddd', padding: { x: 10, y: 6 },
-    }).setScrollFactor(0).setDepth(20);
-    this.weaponIcon = this.add.image(300, GAME_HEIGHT - 61, 'm416')
-      .setDisplaySize(25, 40).setScrollFactor(0).setDepth(20);
+
+    // Panel superior derecho: recorta el espacio transparente del PNG original para que el arma sea legible.
+    const weaponX = GAME_WIDTH - 118;
+    this.add.rectangle(weaponX, 247, 214, 194, 0x0a100d, 0.86)
+      .setStrokeStyle(1, 0x66765f, 0.8).setScrollFactor(0).setDepth(20);
+    this.add.text(weaponX, 169, 'ARMAMENTO ACTIVO', {
+      fontFamily: 'monospace', fontSize: '10px', color: '#a8bc9d', letterSpacing: 1.3,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(21);
+    this.weaponIcon = this.add.image(weaponX, 235, 'm416')
+      .setCrop(0, 240, 395, 180).setDisplaySize(172, 78).setScrollFactor(0).setDepth(22);
+    this.weaponText = this.add.text(weaponX, 304, '', {
+      fontFamily: 'monospace', fontSize: '11px', color: '#f1d78a', align: 'center',
+      wordWrap: { width: 190 }, lineSpacing: 4,
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(22);
+
     this.tierText = this.add.text(24, 62, `${this.progression.getCurrentTier().displayName}  ·  NIVEL 1`, {
       fontFamily: 'monospace', fontSize: '11px', color: '#f1d78a',
       backgroundColor: '#0a100ddd', padding: { x: 10, y: 6 },
@@ -497,7 +643,7 @@ export class GameScene extends Phaser.Scene {
       for (const point of candidates) {
         if (spawned >= CAMPAIGN_CONFIG.reinforcementCount) break;
         const isBlocked = [...this.walls.getChildren(), ...this.obstacles.getChildren()]
-          .some((object) => object.getBounds().contains(point.x, point.y));
+          .some((object) => this.getObjectBounds(object).contains(point.x, point.y));
         if (isBlocked) continue;
         this.createEnemy(point.x, point.y, area, roomIndex, 100 + spawned);
         spawned++;
@@ -583,7 +729,7 @@ export class GameScene extends Phaser.Scene {
     let nearestT = 1;
     const blockers = [...this.walls.getChildren(), ...this.obstacles.getChildren()];
     for (const object of blockers) {
-      const t = segmentRectangleEntryT(originX, originY, targetX, targetY, object.getBounds());
+      const t = segmentRectangleEntryT(originX, originY, targetX, targetY, this.getObjectBounds(object));
       if (t !== null && t < nearestT) nearestT = t;
     }
     const endX = originX + (targetX - originX) * nearestT;
@@ -611,7 +757,6 @@ export class GameScene extends Phaser.Scene {
         this.currentWeapon.range, this.currentWeapon.projectileColor,
       );
     }
-    return true;
   }
 
   private fireEnemyWeapon(enemy: Enemy, angle: number): void {
@@ -657,13 +802,14 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private onEvolutionPickup(first: Phaser.GameObjects.GameObject, second: Phaser.GameObjects.GameObject): void {
+  private onEvolutionPickup(first: object, second: object): void {
     const pickup = getOtherCollisionObject(first, second, this.player);
-    if (!pickup || !this.evolutionPickups.contains(pickup)) return;
-    const tier = Number(pickup.getData('tier')) as PlayerTier;
+    if (!pickup || !this.evolutionPickups.contains(pickup as Phaser.GameObjects.GameObject)) return;
+    const pickupObject = pickup as Phaser.GameObjects.GameObject;
+    const tier = Number(pickupObject.getData('tier')) as PlayerTier;
     const config = this.progression.collectEvolution(tier);
-    (pickup.getData('aura') as Phaser.GameObjects.GameObject | undefined)?.destroy();
-    pickup.destroy();
+    (pickupObject.getData('aura') as Phaser.GameObjects.GameObject | undefined)?.destroy();
+    pickupObject.destroy();
     if (!config) {
       this.showToast('EQUIPO DE NIVEL INFERIOR · SIN CAMBIOS');
       return;
@@ -680,16 +826,17 @@ export class GameScene extends Phaser.Scene {
     this.showToast(`${config.displayName} · HOSTILES +${pressure.pursuitIncreasePercent}% PERSECUCIÓN · +${pressure.fireFrequencyIncreasePercent}% FRECUENCIA DE FUEGO`);
   }
 
-  private onMedkitPickup(first: Phaser.GameObjects.GameObject, second: Phaser.GameObjects.GameObject): void {
+  private onMedkitPickup(first: object, second: object): void {
     const pickup = getOtherCollisionObject(first, second, this.player);
-    if (!pickup || !this.medkitPickups.contains(pickup)) return;
+    if (!pickup || !this.medkitPickups.contains(pickup as Phaser.GameObjects.GameObject)) return;
+    const pickupObject = pickup as Phaser.GameObjects.GameObject;
     const healing = this.progression.getMedkitHealing(this.playerMaxHealth);
     const restored = Math.min(healing, this.playerMaxHealth - this.playerHealth);
     if (restored <= 0) return; // No consume un botiquín cuando la salud ya está completa.
     this.playerHealth += restored;
     this.refreshCheckpointProgress();
-    (pickup.getData('aura') as Phaser.GameObjects.GameObject | undefined)?.destroy();
-    pickup.destroy();
+    (pickupObject.getData('aura') as Phaser.GameObjects.GameObject | undefined)?.destroy();
+    pickupObject.destroy();
     this.updateHealthHud();
     this.showToast(`BOTIQUÍN · +${restored} HP`);
   }
@@ -714,15 +861,17 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private onProjectileBlocked(projectileObject: Phaser.GameObjects.GameObject): void {
+  private onProjectileBlocked(projectileObject: object): void {
     this.deactivateProjectile(projectileObject as Phaser.Physics.Arcade.Image);
   }
 
-  private onPlayerProjectileHit(
-    projectileObject: Phaser.GameObjects.GameObject,
-    enemyObject: Phaser.GameObjects.GameObject,
-  ): void {
-    const bullet = projectileObject as Phaser.Physics.Arcade.Image;
+  private onPlayerProjectileHit(first: object, second: object): void {
+    const firstObject = first as Phaser.GameObjects.GameObject;
+    const secondObject = second as Phaser.GameObjects.GameObject;
+    const bulletObject = this.playerProjectiles.contains(firstObject) ? firstObject : secondObject;
+    const enemyObject = bulletObject === firstObject ? secondObject : firstObject;
+    if (!this.playerProjectiles.contains(bulletObject)) return;
+    const bullet = bulletObject as Phaser.Physics.Arcade.Image;
     const enemy = enemyObject as Enemy;
     if (!bullet.active || !enemy.active || enemy.state === 'Dying') return;
     const damage = Number(bullet.getData('damage') ?? 0);
@@ -734,13 +883,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onEnemyProjectileHit(
-    first: Phaser.GameObjects.GameObject,
-    second: Phaser.GameObjects.GameObject,
+    first: object,
+    second: object,
   ): void {
     // Arcade Physics no garantiza que el jugador llegue como segundo argumento.
     // Identificar por referencia evita desactivar accidentalmente el propio sprite.
     const projectileObject = getOtherCollisionObject(first, second, this.player);
-    if (!projectileObject || !this.enemyProjectiles.contains(projectileObject) || this.playerDead) return;
+    if (!projectileObject || !this.enemyProjectiles.contains(projectileObject as Phaser.GameObjects.GameObject) || this.playerDead) return;
     const bullet = projectileObject as Phaser.Physics.Arcade.Image;
     if (!bullet.active) return;
     const damage = Number(bullet.getData('damage') ?? 0);
@@ -911,17 +1060,19 @@ export class GameScene extends Phaser.Scene {
     const state = this.horde.getState();
     if (!state) return;
     if (state.isFinal) {
+      if (!this.horde.isComplete() || this.victoryTransitionStarted) return;
       this.hordeVictoryPending = true;
       this.enemyProjectiles.getChildren().forEach((object) => this.deactivateProjectile(object as Phaser.Physics.Arcade.Image));
       this.waveText.setText('ARENA DESPEJADA · RESCATE EN CAMINO');
+      this.victoryTransitionStarted = true;
       this.waveAdvanceEvent = this.time.delayedCall(HORDE_CONFIG.waveTransitionDelayMs, () => {
         this.waveAdvanceEvent = undefined;
-        this.physics.world.isPaused = true;
-        this.scene.start('VictoryScene', {
+        this.scene.launch('VictoryScene', {
           kills: this.kills,
           tier: this.progression.getCurrentTierId(),
           waves: state.totalWaves,
         });
+        this.scene.pause();
       });
       return;
     }
@@ -1052,111 +1203,36 @@ export class GameScene extends Phaser.Scene {
     this.healthBar.fillStyle(0x101710, 0.95).fillRect(24, GAME_HEIGHT - 53, 190, 9);
     this.healthBar.fillStyle(color, 1).fillRect(25, GAME_HEIGHT - 52, 188 * ratio, 7);
     this.healthText.setText(`HEALTH  ${this.playerHealth}/${this.playerMaxHealth}`);
-    this.weaponText.setText(`${this.currentWeapon.displayName}  ·  DAÑO ${this.currentWeapon.damageMultiplier}x  ·  MUNICIÓN ∞`);
-    this.weaponIcon.setTexture(this.currentWeapon.id);
+    this.weaponText.setText(`${this.currentWeapon.displayName}\nDAÑO ${this.currentWeapon.damageMultiplier}x  ·  MUNICIÓN ∞`);
+    this.weaponIcon.setTexture(this.currentWeapon.id).setCrop(0, 240, 395, 180);
     this.tierText?.setText(`${this.progression.getCurrentTier().displayName}  ·  NIVEL ${this.progression.getCurrentTierId()}`);
   }
 
   private showGameOver(): void {
-    this.physics.world.isPaused = true;
-    this.time.paused = false;
-    this.isGamePaused = false;
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x030605, 0.88)
-      .setScrollFactor(0).setDepth(100);
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 530, 330, 0x101a16, 0.98)
-      .setStrokeStyle(1, 0x6a554d, 0.9).setScrollFactor(0).setDepth(101);
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 94, 'GAME OVER', {
-      fontFamily: 'monospace', fontSize: '46px', color: '#d95050', fontStyle: 'bold',
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(102);
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30,
-      `OPERADOR: ${String(this.registry.get('playerName') ?? 'SOLDADO').toUpperCase()}\nHOSTILES ELIMINADOS: ${this.kills}`,
-      { fontFamily: 'monospace', fontSize: '13px', color: '#d8e0d8', align: 'center', lineSpacing: 7 },
-    ).setOrigin(0.5).setScrollFactor(0).setDepth(102);
-    this.addOverlayButton(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 48, 'REINTENTAR', () => {
-      this.physics.world.isPaused = false;
-      this.time.paused = false;
-      this.tweens.resumeAll();
-      this.scene.restart();
-    });
-    this.addOverlayButton(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 116, 'REGRESAR AL MENÚ', () => {
-      this.physics.world.isPaused = false;
-      this.time.paused = false;
-      this.tweens.resumeAll();
-      this.scene.start('MainMenuScene');
-    });
-  }
-
-  /** Botón interactivo fuera de contenedores: sus coordenadas y su hit-area quedan fijadas a cámara. */
-  private addOverlayButton(x: number, y: number, label: string, action: () => void): Phaser.GameObjects.GameObject[] {
-    const background = this.add.rectangle(x, y, 290, 48, 0x26392d, 1)
-      .setStrokeStyle(1, 0xb5d58a, 0.85)
-      .setScrollFactor(0)
-      .setDepth(110)
-      .setInteractive({ useHandCursor: true });
-    const text = this.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: '15px', color: '#e8eee8', fontStyle: 'bold', letterSpacing: 1.5,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(111);
-    background.on('pointerover', () => { background.setFillStyle(0x3b563f); text.setColor('#d8f0b7'); });
-    background.on('pointerout', () => { background.setFillStyle(0x26392d); text.setColor('#e8eee8'); });
-    background.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: { stopPropagation(): void }) => {
-      event.stopPropagation();
-      action();
-    });
-    return [background, text];
-  }
-
-  private openPauseMenu(): void {
-    if (this.isGamePaused || this.playerDead) return;
+    if (this.gameOverShown) return;
+    this.gameOverShown = true;
     this.isGamePaused = true;
-    this.physics.world.isPaused = true;
-    this.time.paused = true;
-    this.tweens.pauseAll();
-    this.pauseObjects = [];
-
-    const addPauseObject = <T extends Phaser.GameObjects.GameObject>(object: T): T => {
-      this.pauseObjects.push(object);
-      return object;
-    };
-    addPauseObject(this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x030605, 0.84)
-      .setScrollFactor(0).setDepth(100));
-    addPauseObject(this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 530, 390, 0x101a16, 0.98)
-      .setStrokeStyle(1, 0x60765f, 0.9).setScrollFactor(0).setDepth(101));
-    addPauseObject(this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 135, 'JUEGO EN PAUSA', {
-      fontFamily: 'monospace', fontSize: '30px', color: '#dbe7d9', fontStyle: 'bold', letterSpacing: 2,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(102));
-    this.addOverlayButton(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 42, 'CONTINUAR', () => this.resumeGame())
-      .forEach(addPauseObject);
-    this.addOverlayButton(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 28, 'REINICIAR PARTIDA', () => {
-      this.clearPauseOverlay();
-      this.time.paused = false;
-      this.tweens.resumeAll();
-      this.physics.world.isPaused = false;
-      this.scene.restart();
-    }).forEach(addPauseObject);
-    this.addOverlayButton(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 98, 'MENÚ PRINCIPAL', () => {
-      this.clearPauseOverlay();
-      this.time.paused = false;
-      this.tweens.resumeAll();
-      this.physics.world.isPaused = false;
-      this.scene.start('MainMenuScene');
-    }).forEach(addPauseObject);
-    addPauseObject(this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 160, 'ESC · CONTINUAR', {
-      fontFamily: 'monospace', fontSize: '10px', color: '#8b9c8e', letterSpacing: 1.5,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(102));
+    this.scene.launch('GameMenuScene', {
+      mode: 'gameover',
+      kills: this.kills,
+      playerName: String(this.registry.get('playerName') ?? 'SOLDADO'),
+    });
+    // La interfaz corre en una escena independiente; GameScene se pausa sin congelar su input.
+    this.scene.pause();
   }
 
-  private clearPauseOverlay(): void {
-    this.pauseObjects.forEach((object) => object.destroy());
-    this.pauseObjects = [];
-  }
-
-  private resumeGame(): void {
-    if (!this.isGamePaused) return;
+  private handleSceneResume(): void {
     this.isGamePaused = false;
-    this.time.paused = false;
     this.physics.world.isPaused = false;
+    this.time.paused = false;
     this.tweens.resumeAll();
-    this.clearPauseOverlay();
+  }
+
+  private togglePause(): void {
+    if (this.playerDead || this.isGamePaused || this.hordeVictoryPending) return;
+    this.isGamePaused = true;
+    this.scene.launch('GameMenuScene', { mode: 'pause', kills: this.kills });
+    this.scene.pause();
   }
 
   private applyEnemyTierPressure(tier: PlayerTier): void {
@@ -1169,15 +1245,10 @@ export class GameScene extends Phaser.Scene {
   private hasLineOfSight(x1: number, y1: number, x2: number, y2: number): boolean {
     const blockers = [...this.walls.getChildren(), ...this.obstacles.getChildren()];
     for (const object of blockers) {
-      const bounds = object.getBounds();
+      const bounds = this.getObjectBounds(object);
       if (segmentIntersectsRectangle(x1, y1, x2, y2, bounds)) return false;
     }
     return true;
   }
 
-  private togglePause(): void {
-    if (this.playerDead) return;
-    if (this.isGamePaused) this.resumeGame();
-    else this.openPauseMenu();
-  }
 }

@@ -12,7 +12,7 @@ test('todos los perfiles enemigos reciben +50% de velocidad y +50% de frecuencia
   assert.match(config, /patrolSpeedMultiplier: 1\.5/);
   assert.match(config, /fireFrequencyMultiplier: 1\.5/);
   assert.match(config, /fireRateMs: Math\.round\(profile\.fireRateMs \/ PHASE9_ENEMY_PRESSURE\.fireFrequencyMultiplier\)/);
-  assert.match(progression, /return applyPhase9EnemyPressure\(profiles\[band\]!\)/);
+  assert.match(progression, /return applyPhase9EnemyPressure\(pursuitAdjusted\)/);
   assert.match(enemy, /this\.difficulty\.moveSpeed \* this\.pursuitSpeedMultiplier/);
   assert.match(enemy, /this\.difficulty\.fireRateMs \* this\.fireRateMultiplier/);
 });
@@ -84,5 +84,7 @@ test('al morir en la horda se muestra CheckpointScene y al reintentar solo reini
 test('al completar la oleada final se llama a VictoryScene', () => {
   const scene = read('../src/scenes/GameScene.ts');
   assert.match(scene, /if \(state\.isFinal\)/);
-  assert.match(scene, /this\.scene\.start\('VictoryScene'/);
+  assert.match(scene, /this\.scene\.launch\('VictoryScene'/);
+  assert.match(scene, /this\.horde\.isComplete\(\)/);
+  assert.match(scene, /this\.scene\.pause\(\)/);
 });

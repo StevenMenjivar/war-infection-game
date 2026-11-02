@@ -79,3 +79,28 @@ export const TILE_ASSETS = [
   "BasicConstruction__0000s_0004s_0002_On-screen-effect.png",
   "UseCaseExample.png"
 ] as const;
+
+/** Claves Phaser agrupadas por su uso: sólidos y decoración sin colisión. */
+export const TILE_TEXTURE_KEYS = {
+  // Props sólidos: espuma, climatización antigua y superficies de ventilación.
+  foamNozzle: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0002s_0014_Foam-Nozzle.png")}`,
+  foamWallA: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0002s_0015_Small-_-wall-foam.png")}`,
+  foamWallB: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0002s_0016_Small-_-wall-foam.png")}`,
+  foamWallC: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0002s_0017_Small-_-wall-foam.png")}`,
+  foamWallD: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0002s_0018_Small-_-wall-foam.png")}`,
+  foamWallE: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0002s_0019_Small-_-wall-foam.png")}`,
+  foamMerged: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0002s_0021_Meged-wall-foam.png")}`,
+  climateControlSurface: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0001s_0003_Old-climate-control-surface.png")}`,
+  climateControlBase: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0001s_0004_Old-climate-control-base.png")}`,
+  ventilationSurface: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0001s_0005_Ventilation-surface.png")}`,
+  ventilationBase: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0001s_0007_Ventilation--base.png")}`,
+
+  // Decoración en el piso, sin cuerpos físicos ni participación en oclusión.
+  lattice: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0000s_0000_Lattice.png")}`,
+  hole: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0000s_0001_Hole.png")}`,
+  ventilator: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0000s_0002_Ventilator.png")}`,
+  floorDots: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0003s_0005_Floor-dots-texture.png")}`,
+  floorGrungeA: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0003s_0006_Floor-grunge-texture-1.png")}`,
+  floorGrungeB: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0003s_0007_Floor-grunge-texture-2.png")}`,
+  onScreenLight: `tile_${TILE_ASSETS.indexOf("BasicConstruction__0000s_0004s_0002_On-screen-effect.png")}`,
+} as const;

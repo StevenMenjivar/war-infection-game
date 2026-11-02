@@ -29,23 +29,24 @@ test('la evolución de personaje incrementa persecución y frecuencia de disparo
   assert.match(scene, /enemy\.setPlayerTierPressure\(this\.progression\.getCurrentTierId\(\)\)/);
 });
 
-test('la pausa ofrece continuar, reiniciar y volver al menú, y detiene reloj, física y tweens', () => {
+test('la pausa se muestra en una escena overlay independiente con continuar, reiniciar y menú', () => {
   const scene = read('../src/scenes/GameScene.ts');
-  assert.match(scene, /private openPauseMenu\(\)/);
-  assert.match(scene, /'CONTINUAR'/);
-  assert.match(scene, /'REINICIAR PARTIDA'/);
-  assert.match(scene, /'MENÚ PRINCIPAL'/);
-  assert.match(scene, /this\.time\.paused = true/);
-  assert.match(scene, /this\.physics\.world\.isPaused = true/);
-  assert.match(scene, /this\.tweens\.pauseAll\(\)/);
-  assert.match(scene, /private resumeGame\(\)/);
+  const menu = read('../src/scenes/GameMenuScene.ts');
+  assert.match(scene, /this\.scene\.launch\('GameMenuScene', \{ mode: 'pause'/);
+  assert.match(scene, /this\.scene\.pause\(\)/);
+  assert.match(menu, /'CONTINUAR'/);
+  assert.match(menu, /'REINICIAR PARTIDA'/);
+  assert.match(menu, /'MENÚ PRINCIPAL'/);
+  assert.match(menu, /this\.scene\.resume\('GameScene'\)/);
 });
 
-test('Game Over permite reintentar o regresar al menú', () => {
+test('Game Over usa la escena overlay y envía acciones al GameScene pausado', () => {
   const scene = read('../src/scenes/GameScene.ts');
-  assert.match(scene, /'REINTENTAR'/);
-  assert.match(scene, /'REGRESAR AL MENÚ'/);
-  assert.match(scene, /this\.scene\.start\('MainMenuScene'\)/);
+  const menu = read('../src/scenes/GameMenuScene.ts');
+  assert.match(scene, /mode: 'gameover'/);
+  assert.match(menu, /'REINTENTAR'/);
+  assert.match(menu, /'REGRESAR AL MENÚ'/);
+  assert.match(menu, /requestSceneNavigation\(this, action === 'retry' \? 'GameScene' : 'MainMenuScene'\)/);
 });
 
 test('NameInput limpia el estado al entrar de nuevo y mantiene validación y Enter', () => {
@@ -63,6 +64,10 @@ test('la pantalla de victoria está registrada y contiene el texto y retorno al 
   assert.match(scene, /Has llegado justo a tiempo para el rescate\./);
   assert.match(scene, /REGRESAR AL MENÚ/);
   assert.match(main, /VictoryScene/);
+  const gameScene = read('../src/scenes/GameScene.ts');
+  assert.match(gameScene, /this\.scene\.launch\('VictoryScene'/);
+  assert.match(gameScene, /this\.horde\.isComplete\(\)/);
+  assert.match(gameScene, /this\.scene\.pause\(\)/);
 });
 
 test('el sistema de checkpoint preserva posición, personaje, bajas y restaura el 50% de vida máxima', () => {

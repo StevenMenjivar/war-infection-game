@@ -62,7 +62,9 @@ test('los impactos y la muerte muestran partículas, sangre y Game Over', () => 
   assert.match(scene, /createHitParticles\(/);
   assert.match(scene, /createBloodAt\(/);
   assert.match(scene, /showGameOver\(/);
-  assert.match(scene, /REINTENTAR/);
+  const menu = read('../src/scenes/GameMenuScene.ts');
+  assert.match(scene, /this\.scene\.launch\('GameMenuScene', \{[\s\S]*?mode: 'gameover'/);
+  assert.match(menu, /'REINTENTAR'/);
 });
 
 test('reintentar reinicia salud, contador, arma, disparo y pausa', () => {

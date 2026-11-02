@@ -7,12 +7,14 @@ import { NameInputScene } from './scenes/NameInputScene';
 import { PrologueScene } from './scenes/PrologueScene';
 import { GameScene } from './scenes/GameScene';
 import { VictoryScene } from './scenes/VictoryScene';
+import { GameMenuScene } from './scenes/GameMenuScene';
 import { CheckpointScene } from './scenes/CheckpointScene';
+import { SceneRouterScene } from './scenes/SceneRouterScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   ...PHASER_CONFIG,
   physics: { default: 'arcade', arcade: { debug: false } },
-  scene: [BootScene, PreloadScene, MainMenuScene, NameInputScene, PrologueScene, GameScene, CheckpointScene, VictoryScene],
+  scene: [BootScene, SceneRouterScene, PreloadScene, MainMenuScene, NameInputScene, PrologueScene, GameScene, GameMenuScene, CheckpointScene, VictoryScene],
 };
 
 const game = new Phaser.Game(config);
