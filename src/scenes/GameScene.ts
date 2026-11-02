@@ -611,6 +611,7 @@ export class GameScene extends Phaser.Scene {
         this.currentWeapon.range, this.currentWeapon.projectileColor,
       );
     }
+    return true;
   }
 
   private fireEnemyWeapon(enemy: Enemy, angle: number): void {
