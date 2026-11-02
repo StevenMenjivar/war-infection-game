@@ -4,10 +4,13 @@ export class NameInputScene extends Phaser.Scene {
   private playerName = '';
   private nameText!: Phaser.GameObjects.Text;
   private errorText!: Phaser.GameObjects.Text;
+  private submitting = false;
 
   constructor() { super('NameInputScene'); }
 
   create(): void {
+    this.playerName = '';
+    this.submitting = false;
     const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#090e0c');
     this.add.rectangle(width / 2, height / 2, 650, 390, 0x101a16, 0.96).setStrokeStyle(1, 0x526b58);
@@ -31,15 +34,19 @@ export class NameInputScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '11px', color: '#718176', letterSpacing: 1,
     }).setOrigin(0.5);
 
-    this.input.keyboard?.on('keydown', this.handleKey, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.input.keyboard?.off('keydown', this.handleKey, this));
+    const keyboard = this.input.keyboard;
+    keyboard?.off('keydown', this.handleKey, this);
+    keyboard?.on('keydown', this.handleKey, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => keyboard?.off('keydown', this.handleKey, this));
   }
 
   private handleKey(event: KeyboardEvent): void {
     if (event.key === 'Escape') { this.scene.start('MainMenuScene'); return; }
     if (event.key === 'Enter') {
+      if (this.submitting) return;
       const clean = this.playerName.trim();
       if (clean.length < 3) { this.errorText.setText('El nombre debe contener al menos 3 caracteres.'); return; }
+      this.submitting = true;
       this.registry.set('playerName', clean);
       this.scene.start('PrologueScene');
       return;
