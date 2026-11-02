@@ -1,12 +1,16 @@
 import Phaser from 'phaser';
+import { requestSceneNavigation } from '../systems/SceneNavigation';
 
-/** Pantalla de victoria reutilizable por el flujo de la horda final (Fase 9). */
+/** Pantalla de victoria independiente, superpuesta a GameScene pausada. */
 export class VictoryScene extends Phaser.Scene {
+  private transitioning = false;
+
   constructor() { super('VictoryScene'); }
 
   create(): void {
+    this.transitioning = false;
     const { width, height } = this.scale;
-    this.cameras.main.setBackgroundColor('#070c09');
+    this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     const atmosphere = this.add.graphics();
     atmosphere.fillGradientStyle(0x263b2b, 0x263b2b, 0x070c09, 0x070c09, 0.7);
     atmosphere.fillRect(0, 0, width, height);
@@ -37,7 +41,12 @@ export class VictoryScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     hitArea.on('pointerover', () => { background.setFillStyle(0x3b563f); label.setColor('#d8f0b7'); });
     hitArea.on('pointerout', () => { background.setFillStyle(0x26392d); label.setColor('#e8eee8'); });
-    hitArea.on('pointerdown', () => this.scene.start('MainMenuScene'));
+    hitArea.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: { stopPropagation(): void }) => {
+      event.stopPropagation();
+      if (this.transitioning) return;
+      this.transitioning = true;
+      requestSceneNavigation(this, 'MainMenuScene');
+    });
 
   }
 }

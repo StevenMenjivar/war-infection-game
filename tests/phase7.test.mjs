@@ -61,6 +61,6 @@ test('se añaden niebla, polvo ambiental y sombras simuladas sin sustituir asset
   assert.match(game, /setBlendMode\(Phaser\.BlendModes\.SCREEN\)/);
   assert.match(game, /const mote = this\.add\.circle/);
   assert.match(game, /shadowGraphics\.fillRect/);
-  assert.match(game, /this\.add\.rectangle\(x \+ 8, y \+ 9, width, height, 0x000000/);
+  assert.match(game, /this\.add\.rectangle\(x \+ 5, y \+ 6, width, height, 0x000000/);
   assert.match(game, /showMuzzleFlash/);
 });

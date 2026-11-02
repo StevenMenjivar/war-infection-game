@@ -30,7 +30,7 @@ export class FlashlightSystem {
     this.supportsInvertedMask = scene.game.renderer.type === Phaser.WEBGL;
     if (this.supportsInvertedMask) {
       LIGHTING_CONFIG.flashlightAmbientRadii.forEach((_radius, index) => {
-        const graphics = scene.make.graphics({ x: 0, y: 0, add: false });
+        const graphics = scene.make.graphics({ x: 0, y: 0 });
         const mask = graphics.createGeometryMask();
         mask.setInvertAlpha(true);
         const overlay = scene.add.rectangle(

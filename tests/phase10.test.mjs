@@ -4,31 +4,26 @@ import { readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-test('pausa y Game Over usan botones fijados a cámara con una hit-area real e individual', () => {
+test('pausa y Game Over usan escena overlay independiente con hit areas activas', () => {
   const scene = read('../src/scenes/GameScene.ts');
-  const button = scene.slice(scene.indexOf('private addOverlayButton('), scene.indexOf('private openPauseMenu('));
-  const pause = scene.slice(scene.indexOf('private openPauseMenu('), scene.indexOf('private clearPauseOverlay('));
-  const gameOver = scene.slice(scene.indexOf('private showGameOver('), scene.indexOf('private addOverlayButton('));
-  assert.match(button, /\.setScrollFactor\(0\)/);
-  assert.match(button, /\.setInteractive\(\{ useHandCursor: true \}\)/);
-  assert.match(button, /background\.on\('pointerdown'/);
-  assert.match(button, /event\.stopPropagation\(\)/);
-  assert.doesNotMatch(pause, /add\.container/);
-  assert.match(pause, /CONTINUAR/);
-  assert.match(pause, /REINICIAR PARTIDA/);
-  assert.match(pause, /MENÚ PRINCIPAL/);
-  assert.match(gameOver, /REINTENTAR/);
-  assert.match(gameOver, /REGRESAR AL MENÚ/);
-  assert.match(gameOver, /setScrollFactor\(0\)/);
+  const menu = read('../src/scenes/GameMenuScene.ts');
+  assert.match(scene, /this\.scene\.launch\('GameMenuScene'/);
+  assert.match(scene, /this\.scene\.pause\(\)/);
+  assert.match(menu, /setInteractive\(\{ useHandCursor: true \}\)/);
+  assert.match(menu, /hitArea\.on\('pointerdown'/);
+  assert.match(menu, /event\.stopPropagation\(\)/);
+  assert.match(menu, /this\.scene\.resume\('GameScene'\)/);
+  assert.match(menu, /requestSceneNavigation/);
 });
 
-test('la pausa elimina su interfaz y restablece reloj, física y tweens en las tres acciones', () => {
+test('continuar reanuda GameScene y las acciones destructivas usan transición directa', () => {
   const scene = read('../src/scenes/GameScene.ts');
-  assert.match(scene, /private clearPauseOverlay\(\)/);
-  assert.match(scene, /this\.pauseObjects\.forEach\(\(object\) => object\.destroy\(\)\)/);
-  assert.match(scene, /this\.time\.paused = false/);
-  assert.match(scene, /this\.physics\.world\.isPaused = false/);
-  assert.match(scene, /this\.tweens\.resumeAll\(\)/);
+  const menu = read('../src/scenes/GameMenuScene.ts');
+  assert.doesNotMatch(scene, /pendingMenuAction|handleGameMenuAction|game-menu-action/);
+  assert.match(menu, /requestSceneNavigation\(this, action === 'retry' \? 'GameScene' : 'MainMenuScene'\)/);
+  assert.match(menu, /this\.scene\.stop\(\)/);
+  assert.match(menu, /this\.scene\.resume\('GameScene'\)/);
+  assert.match(scene, /Phaser\.Scenes\.Events\.RESUME, this\.handleSceneResume, this/);
 });
 
 test('el prólogo reinicia su diálogo y limpia sus listeners al reentrar después de una victoria', () => {
@@ -70,7 +65,8 @@ test('la zona de extracción ya no crea barricadas físicas', () => {
   assert.doesNotMatch(cover, /arenaCovers/);
   assert.doesNotMatch(cover, /this\.obstacles\.add\(this\.add\.rectangle\(cover\./);
   assert.match(cover, /área de extracción queda despejada/);
-  assert.match(cover, /this\.map\.rooms\.slice\(1, 8\)/);
+  assert.match(cover, /roomIndex: 2/);
+  assert.match(cover, /roomIndex: 6/);
 });
 
 test('GameScene limpia eventos, temporizadores, tweens y referencias al apagarse', () => {
@@ -80,7 +76,8 @@ test('GameScene limpia eventos, temporizadores, tweens y referencias al apagarse
   assert.match(shutdown, /keyboard\.off\('keydown-L'/);
   assert.match(shutdown, /this\.time\.removeAllEvents\(\)/);
   assert.match(shutdown, /this\.tweens\.killAll\(\)/);
-  assert.match(shutdown, /this\.clearPauseOverlay\(\)/);
+  assert.doesNotMatch(shutdown, /game-menu-action/);
+  assert.match(shutdown, /this\.events\.off\(Phaser\.Scenes\.Events\.RESUME/);
   assert.match(shutdown, /this\.enemyPool = \[\]/);
 });
 
